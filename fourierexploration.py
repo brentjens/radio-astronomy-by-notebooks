@@ -127,12 +127,76 @@ def linear(x):
 
 
 @numba.njit('f4[:,:](i8, i8, f8, f8)')
-def min_max_bl_mask(num_y, num_x, min_bl_fraction, max_bl_fraction):
+def min_max_bl_mask(num_y, num_x, min_bl, max_bl):
+    """
+    Calculate a spatial fourier filter based on a minimum and maximum
+    baseline  fraction, where  the maximum fraction == 1 corresponds
+    to  `np.sqrt(mid_x**2 + mid_y**2)`
+
+    Parameters
+    ----------
+    num_y  : int
+             Number of rows in the image or corresponding uv-plane
+    num_x  : int
+             Number of columns in the image or corresponding uv-plane
+    min_bl : float (0.0 <= x <= 1.0)
+             Minimum baseline in terms of a fraction of the maximum
+             possible baseline (baseline in one of the corners of the
+             uv-plane)
+    max_bl : float (0.0 <= x <= 1.0)
+             Maximum baseline in terms of a fraction of the maximum
+             possible baseline (baseline in one of the corners of the
+             uv-plane)
+    
+    Returns
+    -------
+    Two-dimensional ``numpy.ndarray`` of ``float32`` of shape (num_y,
+    num_x) containing the visibility weights.
+
+    Examples
+    --------
+    >>> min_max_bl_mask(16, 14, 0.0, 1.0)
+    array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+           [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]],
+          dtype=float32)
+    >>> min_max_bl_mask(16, 14, 0.4, 0.7)
+    array([[0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+           [0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
+           [0., 0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0.],
+           [0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0.],
+           [0., 1., 1., 1., 1., 1., 0., 0., 0., 1., 1., 1., 1., 1.],
+           [0., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1.],
+           [1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1.],
+           [1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 1.],
+           [1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 1.],
+           [1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 1.],
+           [1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1.],
+           [0., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1.],
+           [0., 1., 1., 1., 1., 1., 0., 0., 0., 1., 1., 1., 1., 1.],
+           [0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0.],
+           [0., 0., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0.],
+           [0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 0., 0., 0., 0.]],
+          dtype=float32)
+    """
     mask: numba.float32[:, :] = np.empty((num_y, num_x), dtype=np.float32)
     mid_y, mid_x = num_y//2, num_x//2
     max_r = np.sqrt(mid_x**2 + mid_y**2)
-    minf2 = (min_bl_fraction*max_r)**2
-    maxf2 = (max_bl_fraction*max_r)**2
+    minf2 = (min_bl*max_r)**2
+    maxf2 = (max_bl*max_r)**2
     for y in numba.prange(num_y):
         for x in range(num_x):
             r2 = (x-mid_x)**2 + (y - mid_y)**2
@@ -141,6 +205,9 @@ def min_max_bl_mask(num_y, num_x, min_bl_fraction, max_bl_fraction):
             else:
                 mask[y, x] = 0.0
     return mask
+
+
+
 
 
 @dataclass
@@ -194,7 +261,7 @@ def replot(scale, img, min_bl_fraction, max_bl_fraction):
     global cbar_o, cbar_m
     global ax_tl_img, ax_tr_img, ax_bl_img, ax_br_img
     global previous_simresult
-    mask = min_max_bl_mask(img[0].shape[0], img[0].shape[1],
+    mask = min_max_bl_mask(*(img[0].shape),
                            min_bl_fraction/100.0,
                            max_bl_fraction/100.0)
     sim_result = simulate(img[0], mask)
