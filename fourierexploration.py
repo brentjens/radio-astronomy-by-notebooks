@@ -121,6 +121,13 @@ def linear(x):
     >>> a = []
     >>> a is linear(a)
     True
+    >>> b = 'bbb'
+    >>> 'bbb' is linear(b)
+    True
+    >>> np.zeros(3) is linear(np.zeros(3))
+    False
+
+    Because these are different instances.
     """
     return x
 
@@ -209,6 +216,13 @@ def min_max_bl_mask(num_y, num_x, min_bl, max_bl):
 
 
 
+def imread(filename):
+    img = np.array(plt.imread(filename)[:,:,:3].mean(axis=2), dtype='float32')
+    output = pyfftw.empty_aligned(img.shape, dtype='float32')
+    output[:] = img
+    return output
+
+
 
 @dataclass
 class SimulationOutput:
@@ -234,97 +248,98 @@ def simulate(image, weights):
                             weights, weighted_uv_plane,
                             dirty_image)
 
+
+
+def image_fn_generator(image):
+    def image_fn(**kwargs):
+        return image
+    return image_fn
+
+
+
+class FourierExplorerGui(object):
+    def __init__(self, **kwargs):
+        self.fig = plt.figure(**kwargs)
+        self.axes = self.fig.subplots(2,2)
+        self.fig.subplots_adjust(hspace=0, wspace=0)
+        self.imshow_artists = ((None, None), (None, None))
+        self.__name__ = 'FourierExplorerGui'
+
+
+    def replot(self, scale, img_fn, min_bl_fraction, max_bl_fraction):
+        ((ax_tl, ax_tr), (ax_bl, ax_br)) = self.axes
+        ((ax_tl_img, ax_tr_img), (ax_bl_img, ax_br_img)) = self.imshow_artists
+
+        mask = min_max_bl_mask(*(img_fn().shape),
+                               min_bl_fraction/100.0,
+                               max_bl_fraction/100.0)
+        sim_result = simulate(img_fn(), mask)
+        # Original
+        vmin, vmax = np.percentile(sim_result.image[::20, ::20], [1, 99])
+        if ax_tl_img is None:
+            ax_tl_img = ax_tl.imshow(sim_result.image,
+                                     cmap=plt.cm.Greys_r,
+                                     vmin=vmin, vmax=vmax,
+                                     interpolation='nearest')
+            ax_tl.set_xticks([])
+            ax_tl.set_yticks([])
+        else:
+            ax_tl_img.set_data(sim_result.image)
+            ax_tl_img.set_clim(vmin, vmax)
+
+        # Original uv plane
+        to_plot = scale(np.absolute(sim_result.uv_plane))
+        vmin, vmax = np.percentile(to_plot[::20, ::20], (0.5, 99.0))
+        if ax_tr_img is None:
+            ax_tr_img = ax_tr.imshow(to_plot, vmax=vmax, vmin=vmin,
+                                     interpolation='nearest')
+            ax_tr.set_xticks([])
+            ax_tr.set_yticks([])
+        else:
+            ax_tr_img.set_data(to_plot)
+            ax_tr_img.set_clim(vmin, vmax)
+
+        # Masked uv plane
+        to_plot = scale(np.absolute(sim_result.weighted_uv_plane))
+        if ax_br_img is None:
+            ax_br_img = ax_br.imshow(to_plot, vmax=vmax, vmin=vmin,
+                                     interpolation='nearest')
+            ax_br.set_xticks([])
+            ax_br.set_yticks([])
+        else:
+            ax_br_img.set_data(to_plot)
+            ax_br_img.set_clim(vmin, vmax)
+
+        # Dirty image
+        vmin, vmax = np.percentile(sim_result.dirty_image[::20, ::20], [1, 99])
+        if ax_bl_img is None:
+            ax_bl_img = ax_bl.imshow(sim_result.dirty_image,
+                                     cmap=plt.cm.Greys_r,
+                                     vmin=vmin, vmax=vmax,
+                                     interpolation='nearest')
+            ax_bl.set_xticks([])
+            ax_bl.set_yticks([])
+        else:
+            ax_bl_img.set_data(sim_result.dirty_image)
+            ax_bl_img.set_clim(vmin, vmax)
+            previous_simresult = sim_result
+        self.fig.canvas.draw_idle() # Apparently a bit faster than fig.canvas.draw()
+        self.imshow_artists = ((ax_tl_img, ax_tr_img), (ax_bl_img, ax_br_img))
+
+
+    def interact(self, images):
+        ipywidgets.interact(
+            self.replot,
+            scale={'Linear': linear, 'dB': dB},
+            img_fn=ipywidgets.Dropdown(options=images,
+                                       description='Image'),
+            min_bl_fraction=ipywidgets.FloatSlider(
+                min=0, max=100, step=0.25, value=0, continuous_update=True),
+            max_bl_fraction=ipywidgets.FloatSlider(
+                min=0, max=100, step=0.25, value=100, continuous_update=True))
+        pass
+
+
+
 pyfftw.interfaces.cache.enable()
 pyfftw.interfaces.cache.set_keepalive_time(keepalive_time=100.0)
-
-img_bw = pyfftw.empty_aligned((1024, 1024), dtype='float32')
-img_bw[:] = np.array(plt.imread('shirt-bw.png')[:, :, :3].mean(axis=2),
-                     dtype=np.float32)
-
-
-
-fig = plt.figure()#(figsize=(8,8),dpi=180)
-((ax_tl, ax_tr), (ax_bl, ax_br)) = fig.subplots(2, 2)
-fig.subplots_adjust(hspace=0, wspace=0)
-cbar_o = None
-cbar_m = None
-first_time = True
-
-ax_tl_img = None
-ax_tr_img = None
-ax_bl_img = None
-ax_br_img = None
-
-previous_simresult = None
-
-def replot(scale, img, min_bl_fraction, max_bl_fraction):
-    global cbar_o, cbar_m
-    global ax_tl_img, ax_tr_img, ax_bl_img, ax_br_img
-    global previous_simresult
-    mask = min_max_bl_mask(*(img[0].shape),
-                           min_bl_fraction/100.0,
-                           max_bl_fraction/100.0)
-    sim_result = simulate(img[0], mask)
-    # Original
-    vmin, vmax = np.percentile(sim_result.image[::20, ::20], [1, 99])
-    if ax_tl_img is None:
-        ax_tl_img = ax_tl.imshow(sim_result.image,
-                                 cmap=plt.cm.Greys_r,
-                                 vmin=vmin, vmax=vmax,
-                                 interpolation='nearest')
-        ax_tl.set_xticks([])
-        ax_tl.set_yticks([])
-    else:
-        ax_tl_img.set_data(sim_result.image)
-        ax_tl_img.set_clim(vmin, vmax)
-
-    # Original uv plane
-    to_plot = scale(np.absolute(sim_result.uv_plane))
-    vmin, vmax = np.percentile(to_plot[::20, ::20], (0.5, 99.0))
-    if ax_tr_img is None:
-        ax_tr_img = ax_tr.imshow(to_plot, vmax=vmax, vmin=vmin,
-                                 interpolation='nearest')
-        ax_tr.set_xticks([])
-        ax_tr.set_yticks([])
-    else:
-        ax_tr_img.set_data(to_plot)
-        ax_tr_img.set_clim(vmin, vmax)
-
-    # Masked uv plane
-    to_plot = scale(np.absolute(sim_result.weighted_uv_plane))
-    if ax_br_img is None:
-        ax_br_img = ax_br.imshow(to_plot, vmax=vmax, vmin=vmin,
-                                 interpolation='nearest')
-        ax_br.set_xticks([])
-        ax_br.set_yticks([])
-    else:
-        ax_br_img.set_data(to_plot)
-        ax_br_img.set_clim(vmin, vmax)
-
-    # Dirty image
-    vmin, vmax = np.percentile(sim_result.dirty_image[::20, ::20], [1, 99])
-    if ax_bl_img is None:
-        ax_bl_img = ax_bl.imshow(sim_result.dirty_image,
-                                 cmap=plt.cm.Greys_r,
-                                 vmin=vmin, vmax=vmax,
-                                 interpolation='nearest')
-        ax_bl.set_xticks([])
-        ax_bl.set_yticks([])
-    else:
-        ax_bl_img.set_data(sim_result.dirty_image)
-        ax_bl_img.set_clim(vmin, vmax)
-    previous_simresult = sim_result
-    fig.canvas.draw_idle() # Apparently a bit faster than fig.canvas.draw()
-
-
-replot(linear, (img_bw,), 30, 80)
-
-fig.show()
-
-ipywidgets.interact(replot,
-                    scale={'Linear': linear, 'dB': dB},
-                    img={'Shirt': (img_bw,)},
-                    min_bl_fraction=ipywidgets.FloatSlider(
-                        min=0, max=100, step=0.25, value=0, continuous_update=True),
-                    max_bl_fraction=ipywidgets.FloatSlider(
-                        min=0, max=100, step=0.25, value=100, continuous_update=True))
