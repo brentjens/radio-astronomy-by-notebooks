@@ -10,6 +10,12 @@ numerical calculations in Python, and how to properly document and
 test your work to benefit other users of your code, as well as your
 future self.
 
+Good function documentation begins with a synopsis of the function's
+behaviour and intended use, followed by sections describing its
+parameters, its return values, potential exceptions raised, and
+examples. The examples can be used by the ``pytest`` commandline
+utility to perform elementary tests of the functions.
+
 """
 
 from dataclasses import dataclass
@@ -215,12 +221,79 @@ def min_max_bl_mask(num_y, num_x, min_bl, max_bl):
 
 
 
+def make_closure(instance):
+    """
+    Creates and returns a function that simply encapsulates and
+    returns the input object. Objects returned by this function can be
+    used to generate original source images for the synthesis imaging
+    simulation.
+
+    Parameters
+    ----------
+    instance : any object
+               The object to be returned from the closure function.
+
+    Returns
+    -------
+    A function ``closure_fn(**kwargs)`` that, when called, simply
+    returns the input object.
+
+    Examples
+    --------
+    >>> a = np.zeros(3)
+    >>> fn = make_closure(a)
+    >>> fn()
+    array([0., 0., 0.])
+    >>> fn() is a
+    True
+    >>> fn() is np.zeros(3)
+    False
+    """
+    def closure_fn(**kwargs):
+        return instance
+    return closure_fn
+
+
 
 def imread(filename):
+    """
+    Read an image from ``filename`` and return a function that returns
+    that image when called. The image is read into pyfftw-created
+    memory aligned arrays to enable fast FFTs using the pyfftw library.
+
+    Parameters
+    ----------
+    filename : string
+               The image file to read.
+
+    Returns
+    -------
+    A Python function with signature fn(**kwargs) that returns  a 2D,
+    byte-aligned greyscale image.
+
+    Examples
+    --------
+    >>> img = imread('shirt-bw.png')
+    >>> print_options = np.get_printoptions()
+    >>> np.set_printoptions(precision=4)
+    >>> img().shape
+    (1024, 1024)
+    >>> img()
+    array([[0.6052, 0.6405, 0.5869, ..., 0.5007, 0.5869, 0.5346],
+           [0.5882, 0.5621, 0.5987, ..., 0.5647, 0.5046, 0.5556],
+           [0.5569, 0.5556, 0.434 , ..., 0.5242, 0.5281, 0.5346],
+           ...,
+           [0.3974, 0.4654, 0.5033, ..., 0.5163, 0.5333, 0.5242],
+           [0.3961, 0.4248, 0.4928, ..., 0.5412, 0.5373, 0.5621],
+           [0.3778, 0.4144, 0.5333, ..., 0.5333, 0.5046, 0.5333]],
+          dtype=float32)
+    >>> np.set_printoptions(**print_options)    
+
+    """
     img = np.array(plt.imread(filename)[:,:,:3].mean(axis=2), dtype='float32')
     output = pyfftw.empty_aligned(img.shape, dtype='float32')
     output[:] = img
-    return output
+    return make_closure(output)
 
 
 
@@ -250,10 +323,6 @@ def simulate(image, weights):
 
 
 
-def image_fn_generator(image):
-    def image_fn(**kwargs):
-        return image
-    return image_fn
 
 
 
@@ -263,7 +332,7 @@ class FourierExplorerGui(object):
         self.axes = self.fig.subplots(2,2)
         self.fig.subplots_adjust(hspace=0, wspace=0)
         self.imshow_artists = ((None, None), (None, None))
-        self.__name__ = 'FourierExplorerGui'
+#        self.__name__ = 'FourierExplorerGui'
 
 
     def replot(self, scale, img_fn, min_bl_fraction, max_bl_fraction):
@@ -327,11 +396,11 @@ class FourierExplorerGui(object):
         self.imshow_artists = ((ax_tl_img, ax_tr_img), (ax_bl_img, ax_br_img))
 
 
-    def interact(self, images):
+    def interact(self, image_functions):
         ipywidgets.interact(
             self.replot,
             scale={'Linear': linear, 'dB': dB},
-            img_fn=ipywidgets.Dropdown(options=images,
+            img_fn=ipywidgets.Dropdown(options=image_functions,
                                        description='Image'),
             min_bl_fraction=ipywidgets.FloatSlider(
                 min=0, max=100, step=0.25, value=0, continuous_update=True),
