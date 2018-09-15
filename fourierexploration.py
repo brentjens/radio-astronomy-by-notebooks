@@ -377,7 +377,14 @@ def simulate(image, weights, shift_x, shift_y):
 
 
 def normalize_min_max(values, sample_size=1000, perc=(1, 99)):
-    selection = np.random.choice(values.ravel(), sample_size, replace=True)
+    try:
+        selection = np.random.choice(values[np.logical_not(values.mask)],
+                                     sample_size, replace=True)
+    except AttributeError:
+        selection = np.random.choice(values.ravel(),
+                                     sample_size, replace=True)
+        
+    
     min_x, max_x = np.percentile(selection, perc)
     if min_x == max_x or min_x >= max_x*(1-1e-4):
         max_x=values.max()
@@ -389,6 +396,7 @@ def normalize_min_max(values, sample_size=1000, perc=(1, 99)):
 def complex_rgb(complex_ndarray, scale_fn=lambda x: x,
                 perc=(0.2, 99.8), gamma=0.7, sample_size=1000):
     amps = scale_fn(np.absolute(complex_ndarray))
+    amps = np.ma.array(amps, mask=np.isinf(amps))
     min_amp, max_amp = normalize_min_max(amps, sample_size=sample_size, perc=perc)
     amps -= min_amp
     amps /= (max_amp - min_amp)
