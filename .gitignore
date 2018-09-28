@@ -1,0 +1,13 @@
+*~
+*.log
+*.last
+TempLattice*
+*.image
+*.mask
+*.model
+*.psf
+*.sumwt
+*.pb
+*.residual
+*.bzr
+.ipynb_checkpoints
