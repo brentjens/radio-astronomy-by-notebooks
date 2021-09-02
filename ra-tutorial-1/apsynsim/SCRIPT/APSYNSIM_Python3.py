@@ -33,7 +33,8 @@ import matplotlib.cm as cm
 import matplotlib.image as plimg
 from tkinter.scrolledtext import ScrolledText
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk as NavigationToolbar2TkAgg
 try:
   import Tkinter as Tk
 except:
@@ -316,7 +317,7 @@ class Interferometer(object):
        self.canvas = self.figUV.canvas
     else:
       self.canvas = FigureCanvasTkAgg(self.figUV, master=self.tks)
-      self.canvas.show()
+      self.canvas.draw()
       menubar = Tk.Menu(self.tks)
       menubar.add_command(label="Help", command=self._getHelp)
       menubar.add_command(label="Quit", command=self.quit)
@@ -333,7 +334,7 @@ class Interferometer(object):
     self.modelPlot = self.figUV.add_subplot(235,aspect='equal')
     self.dirtyPlot = self.figUV.add_subplot(236,aspect='equal')
 
-    self.spherePlot = pl.axes([0.53,0.82,0.12,0.12],projection='3d',aspect='equal')
+    self.spherePlot = pl.axes([0.53,0.82,0.12,0.12],projection='3d',aspect='auto')
 
     u = np.linspace(0, 2 * np.pi, 100)
     v = np.linspace(0, np.pi, 100)
