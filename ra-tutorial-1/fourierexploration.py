@@ -369,7 +369,7 @@ def simulate(image, weights, shift_x, shift_y):
     weighted_uv_plane[:] = 0
     weighted_uv_plane[:] = fourier_shift(weights*uv_plane, shift_x, shift_y)
     dirty_image = np.empty_like(image, dtype='float32')
-    dirty_image[:] = fftwpack.fftshift(fftwpack.fft2(fftwpack.fftshift(weighted_uv_plane), threads=4).real)*np.product(image.shape)**2/(np.absolute(weights).sum())
+    dirty_image[:] = fftwpack.fftshift(fftwpack.fft2(fftwpack.fftshift(weighted_uv_plane), threads=4).real)*np.prod(image.shape)**2/(np.absolute(weights).sum())
     return SimulationOutput(image, uv_plane,
                             weights, weighted_uv_plane,
                             dirty_image)
