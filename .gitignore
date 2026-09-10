@@ -12,3 +12,4 @@ TempLattice*
 *.bzr
 *.mp4
 .ipynb_checkpoints
+*.lock

@@ -1,0 +1,21 @@
+[project]
+name = "radio-astronomy-by-notebooks"
+version = "0.1.0"
+description = "radio-astronomy-by-notebooks"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "astropy",
+    "h5py",
+    "healpy>=1.20.0",
+    "ipympl",
+    "ipywidgets",
+    "jupyterlab",
+    "lofarantpos",
+    "matplotlib",
+    "numba",
+    "numpy",
+    "pyfftw",
+    "scipy",
+    "tqdm",
+]
